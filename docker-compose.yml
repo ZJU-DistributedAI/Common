@@ -1,0 +1,135 @@
+# This is an example docker-compose file for IPFS Cluster
+# It runs two Cluster peers (cluster1, cluster2) and two Common services (common1, common2)
+# attached to two IPFS daemons (ipfs1, ipfs2).
+# It expects a "compose" subfolder as follows where it will store configurations
+# and states permanently:
+#
+# compose/
+# |-- cluster1
+# |-- cluster2
+# |-- common1
+# |-- common2
+# |-- ipfs1
+# |-- ipfs2
+#
+# During the first start, default configurations are created for all peers.
+
+version: '3.4'
+
+# Cluster secret can be generated with the following commands:
+# od  -vN 32 -An -tx1 /dev/urandom | tr -d ' \n'
+x-cluster-secret:
+  &default-cluster-secret
+  CLUSTER_SECRET: "b20f91f12a48b6d721d5705af20b0fdc9df6816613e61ed6e6fc3f857b80a392"
+
+services:
+  start_dependencies:
+    image: dadarek/wait-for-dependencies
+    depends_on:
+      - ipfs1
+      - ipfs2
+    command: ipfs1:4001 ipfs1:5001 ipfs1:8080 ipfs2:4001 ipfs2:5001 ipfs2:8080
+
+  ##################################################################################
+  ## Cluster PEER 1 ################################################################
+  ##################################################################################
+  ipfs1:
+    container_name: ipfs1
+    image: ipfs/go-ipfs:release
+    ports:
+      - "4001:4001" # ipfs swarm
+      - "5001:5001" # expose if needed/wanted
+      - "6001:8080" # exposes if needed/wanted
+    volumes:
+      - ./compose/ipfs1:/data/ipfs
+
+  common1:
+    container_name: distributed-ai-common1
+    image: distributed-ai-common
+    depends_on:
+      - start_dependencies
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: go run main.go
+    volumes:
+      - ./compose/common1:/data/common
+    environment:
+      IPFS_HOST: ipfs1
+    ports:
+      - "3001:3001" # distributed storage server with swagger
+
+  cluster1:
+    container_name: cluster1
+    image: ipfs/ipfs-cluster:latest
+    depends_on:
+      - start_dependencies
+    environment:
+      <<: *default-cluster-secret
+      IPFS_API: /dns4/ipfs1/tcp/5001
+    ports:
+      - "9094:9094" # API
+      - "9096:9096" # Cluster IPFS Proxy endpoint
+    volumes:
+      - ./compose/cluster1:/data/ipfs-cluster
+
+  ##################################################################################
+  ## Cluster PEER 2 ################################################################
+  ##################################################################################
+  ipfs2:
+    container_name: ipfs2
+    image: ipfs/go-ipfs:release
+    ports:
+      - "4101:4001" # ipfs swarm
+      - "5101:5001" # expose if needed/wanted
+      - "6101:8080" # exposes if needed/wanted
+    volumes:
+      - ./compose/ipfs2:/data/ipfs
+
+  common2:
+    container_name: distributed-ai-common2
+    image: distributed-ai-common
+    depends_on:
+      - start_dependencies
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: go run main.go
+    volumes:
+      - ./compose/common2:/data/common
+    environment:
+      IPFS_HOST: ipfs2
+    ports:
+      - "3101:3001" # distributed storage server with swagger
+
+  cluster2:
+    container_name: cluster2
+    image: ipfs/ipfs-cluster:latest
+    depends_on:
+      - start_dependencies
+    environment:
+      <<: *default-cluster-secret
+      IPFS_API: /dns4/ipfs2/tcp/5001
+    ports:
+      - "9194:9094" # API
+      - "9196:9096" # Cluster IPFS Proxy endpoint
+    volumes:
+      - ./compose/cluster2:/data/ipfs-cluster
+    entrypoint:
+      - "/sbin/tini"
+      - "--"
+    # Translation: if state folder does not exist, find cluster0 id and bootstrap
+    # to it.
+    command: >-
+      sh -c '
+        cmd="daemon --upgrade"
+        if [ ! -d /data/ipfs-cluster/raft ]; then
+          while ! ipfs-cluster-ctl --host /dns4/cluster1/tcp/9094 id; do
+            sleep 1
+          done
+          pid=`ipfs-cluster-ctl --host /dns4/cluster1/tcp/9094 id | grep -o -E "^(\w+)"`
+          sleep 10
+          cmd="daemon --bootstrap /dns4/cluster1/tcp/9096/ipfs/$$pid"
+        fi
+        exec /usr/local/bin/entrypoint.sh $$cmd
+      '
