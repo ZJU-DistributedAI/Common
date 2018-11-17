@@ -24,15 +24,13 @@ func main() {
 	service.Use(middleware.ErrorHandler(service, true))
 	service.Use(middleware.Recover())
 
-	// Mount controllers
+	// Mount storage controllers
 	storageController := NewStorageController(service)
 	app.MountStorageController(service, storageController)
 
-	schemaController := NewSchemaController(service)
-	app.MountSchemaController(service, schemaController)
-
-	swaggerController := NewSwaggerController(service)
-	app.MountSwaggerController(service, swaggerController)
+	// Mount public controlllers
+	publicController := NewPublicController(service)
+	app.MountPublicController(service, publicController)
 
 	// Start service
 	if err := service.ListenAndServe(":3001"); err != nil {

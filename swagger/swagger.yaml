@@ -43,13 +43,70 @@ definitions:
     type: object
 host: localhost:3001
 info:
-  description: This is the common service APIs, which could be used by anyone
-  title: The common service APIs
+  description: This API includes a list of common utilities which can be used by any
+    participants in our system
+  title: Common service APIs documentation
   version: ""
 paths:
+  /api/v0/storage:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload file to IPFS using multipart post
+      operationId: Storage#add
+      parameters:
+      - description: file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/vnd.goa.error
+      - text/plain
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/error'
+      schemes:
+      - http
+      summary: add Storage
+      tags:
+      - Storage
+  /api/v0/storage/{address}:
+    get:
+      description: Cat the file in IPFS at :address
+      operationId: Storage#cat
+      parameters:
+      - description: IPFS address
+        in: path
+        name: address
+        required: true
+        type: string
+      produces:
+      - application/vnd.goa.error
+      - plain/text
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/error'
+      schemes:
+      - http
+      summary: cat Storage
+      tags:
+      - Storage
   /schema/{filepath}:
     get:
-      operationId: schema#/schema/*filepath
+      operationId: Public#/schema/*filepath
       parameters:
       - description: Relative file path
         in: path
@@ -68,51 +125,9 @@ paths:
       schemes:
       - http
       summary: Download public/schema/
-  /storage:
-    post:
-      consumes:
-      - multipart/form-data
-      description: Upload file in multipart request
-      operationId: storage#add
-      parameters:
-      - description: file
-        in: formData
-        name: file
-        required: false
-        type: file
-      produces:
-      - text/plain
-      responses:
-        "200":
-          description: OK
-      schemes:
-      - http
-      summary: add storage
-      tags:
-      - storage
-  /storage/{address}:
-    get:
-      description: Cat the file in distributed storage by address
-      operationId: storage#cat
-      parameters:
-      - description: IPFS address
-        in: path
-        name: address
-        required: true
-        type: string
-      produces:
-      - text/plain
-      responses:
-        "200":
-          description: OK
-      schemes:
-      - http
-      summary: cat storage
-      tags:
-      - storage
   /swagger/{filepath}:
     get:
-      operationId: swagger#/swagger/*filepath
+      operationId: Public#/swagger/*filepath
       parameters:
       - description: Relative file path
         in: path
